@@ -1,0 +1,139 @@
+--Check for Nulls or Duplicates in Primary Key
+--Expectation: No Result
+
+SELECT * 
+FROM bronze.crm_cust_info
+
+
+--Finding if there are coulmns with same values
+--There are also columns that primary key is NULL
+
+SELECT
+	cst_id,
+	COUNT(*) as same_values
+FROM bronze.crm_cust_info
+GROUP BY cst_id
+HAVING COUNT(*) > 1 OR cst_id IS NULL
+
+--Data checking and cleansing for the id = 29466
+SELECT 
+*,
+ROW_NUMBER() OVER (PARTITION BY cst_id ORDER BY cst_create_date DESC) as flag_last
+FROM bronze.crm_cust_info
+WHERE cst_id=29466
+
+
+--Checking and giving order for all of the raws.
+--finding only values that has more than 1
+
+SELECT
+*
+FROM(
+	SELECT 
+	*,
+	ROW_NUMBER() OVER (PARTITION BY cst_id ORDER BY cst_create_date DESC) as flag_last
+	FROM bronze.crm_cust_info) t 
+WHERE flag_last!=1
+-- By this query, we can find the raws that we don't need that they are on the lower rank than 1. 
+
+
+
+
+--Checking for unwanted spaces. 
+   --finding raws that has spaces at the start or at the end.
+--Expectation: No results
+
+SELECT cst_firstname
+FROM bronze.crm_cust_info
+WHERE cst_firstname!=TRIM(cst_firstname)
+
+SELECT cst_gndr
+FROM bronze.crm_cust_info
+WHERE cst_gndr!=TRIM(cst_gndr)
+
+--Changing data that has spaces before and after.
+SELECT 
+	cst_id,
+	cst_key,
+	TRIM(cst_firstname) AS cst_firstname,
+	TRIM(cst_lastname) AS cst_lastname,
+	cst_marital_status,
+	cst_gndr,
+	cst_create_date
+FROM bronze.crm_cust_info
+
+
+--Data Standardization and Consistency
+SELECT DISTINCT cst_gndr
+FROM bronze.crm_cust_info
+-- The result is NULL, F, M.  these may be considired not enough for our project, for example ,we may want to get full words instead of abbreviations. 
+
+SELECT 
+	cst_id,
+	cst_key,
+	TRIM(cst_firstname) AS cst_firstname,
+	TRIM(cst_lastname) AS cst_lastname,
+	cst_marital_status,
+	CASE WHEN UPPER(TRIM(cst_gndr))='F' THEN 'Female'
+		WHEN UPPER(TRIM(cst_gndr))='M' THEN 'Male'  
+		ELSE 'n/a'  -- For NULL values
+	END cst_gndr,
+	cst_create_date
+FROM bronze.crm_cust_info
+
+
+--Repeating same thing for coulmn named cst_marital_status.
+SELECT DISTINCT cst_marital_status
+FROM bronze.crm_cust_info
+-- The result is S,M,NULL wich we want to show full values not abbreviations. 
+
+
+SELECT 
+	cst_id,
+	cst_key,
+	TRIM(cst_firstname) AS cst_firstname,
+	TRIM(cst_lastname) AS cst_lastname,
+
+	CASE WHEN UPPER(TRIM(cst_marital_status))='S' THEN 'Single'
+		WHEN UPPER(TRIM(cst_marital_status))='M' THEN 'Married'  
+		ELSE 'n/a'  -- For NULL values
+	END cst_marital_status,
+
+	CASE WHEN UPPER(TRIM(cst_gndr))='F' THEN 'Female'
+		WHEN UPPER(TRIM(cst_gndr))='M' THEN 'Male'  
+		ELSE 'n/a'  -- For NULL values
+	END cst_gndr,
+	cst_create_date
+FROM bronze.crm_cust_info
+
+
+--At the end of our operations, we need to insert to silver table in order to complete transformation.
+INSERT INTO silver.crm_cust_info (
+	cst_id, 
+	cst_key, 
+	cst_firstname, 
+	cst_lastname, 
+	cst_marital_status, 
+	cst_gndr,
+	cst_create_date
+	)
+	SELECT 
+		cst_id,
+		cst_key,
+		TRIM(cst_firstname) AS cst_firstname,  --TRIMMING
+		TRIM(cst_lastname) AS cst_lastname,  --TRIMMING
+
+		CASE WHEN UPPER(TRIM(cst_marital_status))='S' THEN 'Single'
+			WHEN UPPER(TRIM(cst_marital_status))='M' THEN 'Married'  
+			ELSE 'n/a'  -- For NULL values      -- NORMALIZATION
+		END cst_marital_status,
+
+		CASE WHEN UPPER(TRIM(cst_gndr))='F' THEN 'Female'
+			WHEN UPPER(TRIM(cst_gndr))='M' THEN 'Male'     -- NORMALIZATION
+			ELSE 'n/a'  -- For NULL values
+		END cst_gndr,
+		cst_create_date
+	FROM bronze.crm_cust_info
+
+
+
